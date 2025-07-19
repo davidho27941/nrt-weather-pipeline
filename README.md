@@ -56,8 +56,11 @@ mvn compile exec:java \
 Alternatively, you can use the included helper script:
 
 ```bash
-./run.sh <gcp-project> <region> <bucket> <dataset> <api-token>
+./run.sh <gcp-project> <region> <bucket> <dataset> <api-token> [trust-store-secret-id] [trust-store-secret-version]
 ```
+
+If the optional trust store arguments are omitted, the script defaults to `cwa-trust-pem` for the secret ID
+and `latest` for the secret version.
 
 The pipeline expects the Pub/Sub topic `weather_stn_id` to contain
 station IDs as plain strings.

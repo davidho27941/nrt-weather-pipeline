@@ -80,7 +80,7 @@ public class WeatherPipeline {
     FetchWeatherDoFn(String apiToken, String projectId, String secretId, String secretVersion) {
       this.apiToken = apiToken;
       this.projectId = projectId;
-      this.secretId = (secretId == null || secretId.isEmpty()) ? "cwa-truststore-pem" : secretId;
+      this.secretId = (secretId == null || secretId.isEmpty()) ? "cwa-trust-pem" : secretId;
       this.secretVersion = (secretVersion == null || secretVersion.isEmpty()) ? "latest" : secretVersion;
     }
 
