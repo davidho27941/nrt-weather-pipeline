@@ -1,30 +1,24 @@
 package com.example;
 
-import com.google.api.services.bigquery.model.TableFieldSchema;
-import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.bigquery.model.TableSchema;
 import com.google.gson.Gson;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okhttp3.logging.HttpLoggingInterceptor;
 import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
-import org.apache.beam.sdk.values.TypeDescriptor;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
 import org.joda.time.Duration;
@@ -60,9 +54,23 @@ public class WeatherPipeline {
   static class FetchWeatherDoFn extends DoFn<String, String> {
     private static final Logger logger = Logger.getLogger(FetchWeatherDoFn.class.getName());
     private final String apiToken;
+    private transient OkHttpClient httpClient;
 
     FetchWeatherDoFn(String apiToken) {
       this.apiToken = apiToken;
+    }
+
+    @Setup
+    public void setup() {
+      // Optional: add an HTTP logging interceptor for debugging
+      HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
+      logging.setLevel(HttpLoggingInterceptor.Level.BASIC);
+
+      this.httpClient = new OkHttpClient.Builder()
+          .connectTimeout(java.time.Duration.ofSeconds(10))
+          .readTimeout(java.time.Duration.ofSeconds(20))
+          .addInterceptor(logging)
+          .build();
     }
 
     @ProcessElement
@@ -74,16 +82,27 @@ public class WeatherPipeline {
             "?Authorization=%s&limit=1&StationId=%s",
             URLEncoder.encode(apiToken, StandardCharsets.UTF_8.name()),
             URLEncoder.encode(stationId, StandardCharsets.UTF_8.name()));
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setRequestMethod("GET");
-        try (BufferedReader reader =
-            new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-          String response = reader.lines().collect(Collectors.joining("\n"));
-          // Output the raw JSON string.
-          out.output(response);
+        Request request = new Request.Builder()
+            .url(url)
+            .get()
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+          if (!response.isSuccessful()) {
+            logger.warning("Fetch failed for station " + stationId +
+                           " with HTTP " + response.code());
+            return;
+          }
+          ResponseBody body = response.body();
+          if (body != null) {
+            String json = body.string();
+            out.output(json);
+          } else {
+            logger.warning("Empty response body for station " + stationId);
+          }
         }
       } catch (IOException e) {
-        System.err.println("Failed to fetch data for station " + stationId + ": " + e.getMessage());
+        logger.severe("Failed to fetch data for station " + stationId + ": " + e.getMessage());
       }
     }
   }
