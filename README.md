@@ -53,5 +53,11 @@ mvn compile exec:java \
     --apiToken=<api-token>"
 ```
 
+Alternatively, you can use the included helper script:
+
+```bash
+./run.sh <gcp-project> <region> <bucket> <dataset> <api-token>
+```
+
 The pipeline expects the Pub/Sub topic `weather_stn_id` to contain
 station IDs as plain strings.
