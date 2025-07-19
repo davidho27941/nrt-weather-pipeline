@@ -12,6 +12,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
@@ -53,6 +54,7 @@ public class WeatherPipeline {
 
   /** DoFn that calls the CWA API for a given station ID. */
   static class FetchWeatherDoFn extends DoFn<String, String> {
+    private static final Logger logger = Logger.getLogger(FetchWeatherDoFn.class.getName());
     private final String apiToken;
     private final Gson gson = new Gson();
 
@@ -62,6 +64,7 @@ public class WeatherPipeline {
 
     @ProcessElement
     public void processElement(@Element String stationId, OutputReceiver<String> out) {
+      logger.info("Received station ID: " + stationId);
       try {
         String url = String.format(
             "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001" +
