@@ -12,6 +12,31 @@ This project uses Maven. To build a shaded JAR:
 mvn package
 ```
 
+## Environment Setup
+
+Create the required Pub/Sub topic, Cloud Storage bucket and BigQuery table before launching the pipeline. The commands below assume you have the `gcloud`, `gsutil` and `bq` CLIs installed and authenticated.
+
+```bash
+# configure your project
+gcloud config set project <gcp-project>
+
+# create the Pub/Sub topic that will contain station IDs
+gcloud pubsub topics create weather_stn_id
+
+# create a bucket for Dataflow output
+gsutil mb -l <region> gs://<bucket>
+
+# create a BigQuery dataset and table for raw JSON
+bq --location=<region> mk <dataset>
+bq mk --table <dataset>.weather_raw raw_json:STRING
+```
+
+All of the above steps can be executed automatically using the `init.sh` script provided in this repository:
+
+```bash
+./init.sh <gcp-project> <region> <bucket> <dataset>
+```
+
 ## Running on Dataflow
 
 Use Maven's `exec:java` goal to launch the pipeline:
