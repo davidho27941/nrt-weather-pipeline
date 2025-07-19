@@ -25,6 +25,9 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.TypeDescriptor;
+import org.apache.beam.sdk.transforms.windowing.FixedWindows;
+import org.apache.beam.sdk.transforms.windowing.Window;
+import org.joda.time.Duration;
 
 /**
  * A simple streaming pipeline that reads station IDs from Pub/Sub, fetches
@@ -32,6 +35,7 @@ import org.apache.beam.sdk.values.TypeDescriptor;
  * BigQuery.
  */
 public class WeatherPipeline {
+  private final Gson gson = new Gson();
 
   /** Pipeline options for the Weather pipeline. */
   public interface Options extends DataflowPipelineOptions {
@@ -56,7 +60,6 @@ public class WeatherPipeline {
   static class FetchWeatherDoFn extends DoFn<String, String> {
     private static final Logger logger = Logger.getLogger(FetchWeatherDoFn.class.getName());
     private final String apiToken;
-    private final Gson gson = new Gson();
 
     FetchWeatherDoFn(String apiToken) {
       this.apiToken = apiToken;
@@ -98,22 +101,14 @@ public class WeatherPipeline {
         // Fetch weather data from the API.
         .apply("FetchWeather", ParDo.of(new FetchWeatherDoFn(options.getApiToken())))
         // Write raw JSON to Cloud Storage.
-        .apply("WriteToGCS", TextIO.write().to(options.getOutputPath()).withSuffix(".json"))
-        // Convert to TableRow for BigQuery.
-        .apply("ToTableRow",
-            MapElements.into(TypeDescriptor.of(TableRow.class))
-                .via(json -> new TableRow().set("raw_json", json)))
-        // Write to BigQuery.
-        .apply(
-            "WriteToBQ",
-            BigQueryIO.writeTableRows()
-                .to(options.getBigQueryTable())
-                .withSchema(
-                    new TableSchema().setFields(
-                        Collections.singletonList(
-                            new TableFieldSchema().setName("raw_json").setType("STRING"))))
-                .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
-                .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED));
+	.apply("FixedWindow", Window.<String>into(
+          FixedWindows.of(Duration.standardMinutes(1))))
+        // 4. **开启 windowed writes** 并指定分片数
+        .apply("WriteToGCS", TextIO.write()
+          .withWindowedWrites()           // 必须！
+          .withNumShards(1)               // 可按需调整
+          .to(options.getOutputPath())    
+          .withSuffix(".json"));
 
     pipeline.run();
   }
