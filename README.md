@@ -64,3 +64,15 @@ and `latest` for the secret version.
 
 The pipeline expects the Pub/Sub topic `weather_stn_id` to contain
 station IDs as plain strings.
+
+## Cleanup
+
+When you are finished you can remove the created resources with the
+`tear_down.sh` script. It deletes the Pub/Sub topic, Cloud Storage bucket
+and BigQuery dataset by default. Individual resources can be skipped
+using the flags shown below. The topic name can also be overridden.
+
+```bash
+./tear_down.sh <gcp-project> <bucket> <dataset> [--topic weather_stn_id] \
+  [--no-topic] [--no-bucket] [--no-dataset]
+```
