@@ -1,6 +1,10 @@
 package com.example;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.net.URLEncoder;
@@ -164,9 +168,29 @@ public class WeatherPipeline {
               ResponseBody body = response.body();
               if (body != null) {
                 String json = body.string();
-                out.get(JSON_TAG).output(json);
-                out.get(SUCCESS_TAG).output(stationId);
-                return;
+                boolean hasRecords = false;
+                try {
+                  JsonElement root = JsonParser.parseString(json);
+                  if (root.isJsonObject()) {
+                    JsonObject obj = root.getAsJsonObject();
+                    JsonObject records = obj.getAsJsonObject("records");
+                    if (records != null) {
+                      JsonArray stationArr = records.getAsJsonArray("Station");
+                      hasRecords = stationArr != null && stationArr.size() > 0;
+                    }
+                  }
+                } catch (Exception e) {
+                  logger.warning(
+                      "Failed to parse JSON for station " + stationId + ": " + e.getMessage());
+                }
+
+                if (hasRecords) {
+                  out.get(JSON_TAG).output(json);
+                  out.get(SUCCESS_TAG).output(stationId);
+                  return;
+                } else {
+                  logger.warning("Empty records.Station for station " + stationId);
+                }
               } else {
                 logger.warning("Empty response body for station " + stationId);
               }
