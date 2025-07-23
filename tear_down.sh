@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <project-id> <bucket> <dataset> [--topic name] [--no-topic] [--no-bucket] [--no-dataset]" >&2
+  echo "Usage: $0 <project-id> <bucket> <dataset> [--topic name] [--retry-topic name] [--no-topic] [--no-retry-topic] [--no-bucket] [--no-dataset]" >&2
   exit 1
 }
 
@@ -16,7 +16,9 @@ DATASET=$3
 shift 3
 
 TOPIC="weather_stn_id"
+RETRY_TOPIC="weather_retry"
 DELETE_TOPIC=true
+DELETE_RETRY_TOPIC=true
 DELETE_BUCKET=true
 DELETE_DATASET=true
 
@@ -26,8 +28,16 @@ while [[ $# -gt 0 ]]; do
       TOPIC="$2"
       shift 2
       ;;
+    --retry-topic)
+      RETRY_TOPIC="$2"
+      shift 2
+      ;;
     --no-topic)
       DELETE_TOPIC=false
+      shift
+      ;;
+    --no-retry-topic)
+      DELETE_RETRY_TOPIC=false
       shift
       ;;
     --no-bucket)
@@ -53,6 +63,14 @@ if $DELETE_TOPIC; then
     gcloud pubsub topics delete "$TOPIC"
   else
     echo "Pub/Sub topic $TOPIC does not exist" >&2
+  fi
+fi
+
+if $DELETE_RETRY_TOPIC; then
+  if gcloud pubsub topics describe "$RETRY_TOPIC" >/dev/null 2>&1; then
+    gcloud pubsub topics delete "$RETRY_TOPIC"
+  else
+    echo "Pub/Sub topic $RETRY_TOPIC does not exist" >&2
   fi
 fi
 

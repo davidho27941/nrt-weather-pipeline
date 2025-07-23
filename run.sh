@@ -2,11 +2,11 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <project-id> <region> <bucket> <dataset> <api-token> [trust-store-secret-id] [trust-store-secret-version]" >&2
+  echo "Usage: $0 <project-id> <region> <bucket> <dataset> <api-token> <retry-attempts> [trust-store-secret-id] [trust-store-secret-version]" >&2
   exit 1
 }
 
-if [ "$#" -ne 5 ] && [ "$#" -ne 7 ]; then
+if [ "$#" -ne 6 ] && [ "$#" -ne 8 ]; then
   usage
 fi
 
@@ -20,9 +20,10 @@ REGION=$2
 BUCKET=$3
 DATASET=$4
 API_TOKEN=$5
-if [ "$#" -eq 7 ]; then
-  TRUST_STORE_SECRET_ID=$6
-  TRUST_STORE_SECRET_VERSION=$7
+RETRY_ATTEMPTS=$6
+if [ "$#" -eq 8 ]; then
+  TRUST_STORE_SECRET_ID=$7
+  TRUST_STORE_SECRET_VERSION=$8
 else
   TRUST_STORE_SECRET_ID="cwa-trust-pem"
   TRUST_STORE_SECRET_VERSION="latest"
@@ -37,6 +38,7 @@ mvn compile exec:java \
     --outputPath=gs://${BUCKET}/weather/output \
     --bigQueryTable=${PROJECT_ID}:${DATASET}.weather_raw \
     --apiToken=${API_TOKEN} \
+    --retryAttempts=${RETRY_ATTEMPTS} \
     --trustStoreSecretId=${TRUST_STORE_SECRET_ID} \
     --trustStoreSecretVersion=${TRUST_STORE_SECRET_VERSION}"
 
