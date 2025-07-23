@@ -26,11 +26,16 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.options.Description;
+import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
+import org.apache.beam.sdk.values.PCollectionTuple;
+import org.apache.beam.sdk.values.TupleTag;
+import org.apache.beam.sdk.values.TupleTagList;
+import org.apache.beam.sdk.transforms.DoFn.MultiOutputReceiver;
 import org.joda.time.Duration;
 
 /**
@@ -66,22 +71,38 @@ public class WeatherPipeline {
     @Description("Secret version for the trust store")
     String getTrustStoreSecretVersion();
     void setTrustStoreSecretVersion(String value);
+
+    @Description("Number of retry attempts for failed API requests")
+    @Default.Integer(3)
+    Integer getRetryAttempts();
+    void setRetryAttempts(Integer value);
   }
 
   /** DoFn that calls the CWA API for a given station ID. */
   static class FetchWeatherDoFn extends DoFn<String, String> {
+    static final TupleTag<String> JSON_TAG = new TupleTag<String>() {};
+    static final TupleTag<String> SUCCESS_TAG = new TupleTag<String>() {};
+    static final TupleTag<String> FAILED_TAG = new TupleTag<String>() {};
+
     private static final Logger logger = Logger.getLogger(FetchWeatherDoFn.class.getName());
     private final String apiToken;
     private final String projectId;
     private final String secretId;
     private final String secretVersion;
+    private final int retryAttempts;
     private transient OkHttpClient httpClient;
 
-    FetchWeatherDoFn(String apiToken, String projectId, String secretId, String secretVersion) {
+    FetchWeatherDoFn(
+        String apiToken,
+        String projectId,
+        String secretId,
+        String secretVersion,
+        int retryAttempts) {
       this.apiToken = apiToken;
       this.projectId = projectId;
       this.secretId = (secretId == null || secretId.isEmpty()) ? "cwa-trust-pem" : secretId;
       this.secretVersion = (secretVersion == null || secretVersion.isEmpty()) ? "latest" : secretVersion;
+      this.retryAttempts = retryAttempts;
     }
 
     @Setup
@@ -123,35 +144,47 @@ public class WeatherPipeline {
     }
 
     @ProcessElement
-    public void processElement(@Element String stationId, OutputReceiver<String> out) {
+    public void processElement(@Element String stationId, MultiOutputReceiver out) {
       logger.info("Received station ID: " + stationId);
-      try {
-        String url = String.format(
-            "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001" +
-            "?Authorization=%s&limit=1&StationId=%s",
-            URLEncoder.encode(apiToken, StandardCharsets.UTF_8.name()),
-            URLEncoder.encode(stationId, StandardCharsets.UTF_8.name()));
-        Request request = new Request.Builder()
-            .url(url)
-            .get()
-            .build();
+      int attempt = 0;
+      while (true) {
+        try {
+          String url = String.format(
+              "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001" +
+              "?Authorization=%s&limit=1&StationId=%s",
+              URLEncoder.encode(apiToken, StandardCharsets.UTF_8.name()),
+              URLEncoder.encode(stationId, StandardCharsets.UTF_8.name()));
+          Request request = new Request.Builder()
+              .url(url)
+              .get()
+              .build();
 
-        try (Response response = httpClient.newCall(request).execute()) {
-          if (!response.isSuccessful()) {
-            logger.warning("Fetch failed for station " + stationId +
-                           " with HTTP " + response.code());
-            return;
+          try (Response response = httpClient.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+              ResponseBody body = response.body();
+              if (body != null) {
+                String json = body.string();
+                out.get(JSON_TAG).output(json);
+                out.get(SUCCESS_TAG).output(stationId);
+                return;
+              } else {
+                logger.warning("Empty response body for station " + stationId);
+              }
+            } else {
+              logger.warning(
+                  "Fetch failed for station " + stationId + " with HTTP " + response.code());
+            }
           }
-          ResponseBody body = response.body();
-          if (body != null) {
-            String json = body.string();
-            out.output(json);
-          } else {
-            logger.warning("Empty response body for station " + stationId);
-          }
+        } catch (IOException e) {
+          logger.severe(
+              "Failed to fetch data for station " + stationId + ": " + e.getMessage());
         }
-      } catch (IOException e) {
-        logger.severe("Failed to fetch data for station " + stationId + ": " + e.getMessage());
+
+        if (attempt >= retryAttempts) {
+          out.get(FAILED_TAG).output(stationId);
+          return;
+        }
+        attempt++;
       }
     }
   }
@@ -163,27 +196,51 @@ public class WeatherPipeline {
 
     Pipeline pipeline = Pipeline.create(options);
 
-    // Read station IDs from Pub/Sub.
-    pipeline
-        .apply("ReadStationId", PubsubIO.readStrings().fromTopic(options.getInputTopic()))
-        // Fetch weather data from the API.
+    PCollectionTuple result =
+        pipeline
+            .apply(
+                "ReadStationId",
+                PubsubIO.readStrings().fromTopic(options.getInputTopic()))
+            .apply(
+                "FetchWeather",
+                ParDo.of(
+                        new FetchWeatherDoFn(
+                            options.getApiToken(),
+                            options.getProject(),
+                            options.getTrustStoreSecretId(),
+                            options.getTrustStoreSecretVersion(),
+                            options.getRetryAttempts()))
+                    .withOutputTags(
+                        FetchWeatherDoFn.JSON_TAG,
+                        TupleTagList.of(FetchWeatherDoFn.SUCCESS_TAG)
+                            .and(FetchWeatherDoFn.FAILED_TAG)));
+
+    result
+        .get(FetchWeatherDoFn.JSON_TAG)
         .apply(
-            "FetchWeather",
-            ParDo.of(
-                new FetchWeatherDoFn(
-                    options.getApiToken(),
-                    options.getProject(),
-                    options.getTrustStoreSecretId(),
-                    options.getTrustStoreSecretVersion())))
-        // Write raw JSON to Cloud Storage.
-	.apply("FixedWindow", Window.<String>into(
-          FixedWindows.of(Duration.standardMinutes(1))))
-        // 4. **开启 windowed writes** 并指定分片数
-        .apply("WriteToGCS", TextIO.write()
-          .withWindowedWrites()           // 必须！
-          .withNumShards(1)               // 可按需调整
-          .to(options.getOutputPath())    
-          .withSuffix(".json"));
+            "FixedWindow",
+            Window.<String>into(FixedWindows.of(Duration.standardMinutes(1))))
+        .apply(
+            "WriteToGCS",
+            TextIO.write()
+                .withWindowedWrites()
+                .withNumShards(1)
+                .to(options.getOutputPath())
+                .withSuffix(".json"));
+
+    // Publish failed IDs to a retry Pub/Sub topic
+    result
+        .get(FetchWeatherDoFn.FAILED_TAG)
+        .apply(
+            "PublishFailedIds",
+            PubsubIO.writeStrings()
+                .to(String.format(
+                    "projects/%s/topics/weather_retry",
+                    options.getProject())));
+
+    // The success and failed ID collections are available as
+    // result.get(FetchWeatherDoFn.SUCCESS_TAG) and result.get(FetchWeatherDoFn.FAILED_TAG)
+    // for further processing.
 
     pipeline.run();
   }

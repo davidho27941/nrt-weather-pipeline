@@ -22,6 +22,13 @@ else
   echo "Pub/Sub topic weather_stn_id already exists" >&2
 fi
 
+# Create retry Pub/Sub topic
+if ! gcloud pubsub topics describe weather_retry >/dev/null 2>&1; then
+  gcloud pubsub topics create weather_retry
+else
+  echo "Pub/Sub topic weather_retry already exists" >&2
+fi
+
 # Create GCS bucket
 if ! gsutil ls -b "gs://$BUCKET" >/dev/null 2>&1; then
   gsutil mb -p "$PROJECT_ID" -l "$REGION" "gs://$BUCKET"
