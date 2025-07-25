@@ -40,7 +40,7 @@ else
 fi
 
 # Additional API configuration via environment variables
-API_BASE_URL="${API_BASE_URL:-https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001}"
+API_BASE_URL="${API_BASE_URL:-https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001}"
 API_DEFAULT_PARAM="${API_DEFAULT_PARAM:-}"
 API_HEADERS="${API_HEADERS:-}"
 TOKEN_IN_HEADER="${TOKEN_IN_HEADER:-false}"
