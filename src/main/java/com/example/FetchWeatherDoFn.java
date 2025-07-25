@@ -8,8 +8,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
@@ -22,6 +20,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okhttp3.logging.HttpLoggingInterceptor;
+import com.example.WeatherApiRequestFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.DoFn.MultiOutputReceiver;
 import org.apache.beam.sdk.values.TupleTag;
@@ -33,7 +32,7 @@ public class FetchWeatherDoFn extends DoFn<String, String> {
   public static final TupleTag<String> FAILED_TAG = new TupleTag<String>() {};
 
   private static final Logger logger = Logger.getLogger(FetchWeatherDoFn.class.getName());
-  private final String apiToken;
+  private final WeatherApiRequestFactory requestFactory;
   private final String projectId;
   private final String secretId;
   private final String secretVersion;
@@ -41,12 +40,12 @@ public class FetchWeatherDoFn extends DoFn<String, String> {
   private transient OkHttpClient httpClient;
 
   public FetchWeatherDoFn(
-      String apiToken,
+      WeatherApiRequestFactory requestFactory,
       String projectId,
       String secretId,
       String secretVersion,
       int retryAttempts) {
-    this.apiToken = apiToken;
+    this.requestFactory = requestFactory;
     this.projectId = projectId;
     this.secretId = (secretId == null || secretId.isEmpty()) ? "cwa-trust-pem" : secretId;
     this.secretVersion = (secretVersion == null || secretVersion.isEmpty()) ? "latest" : secretVersion;
@@ -98,13 +97,7 @@ public class FetchWeatherDoFn extends DoFn<String, String> {
     int attempt = 0;
     while (true) {
       try {
-        String url =
-            String.format(
-                "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
-                    + "?Authorization=%s&limit=1&StationId=%s",
-                URLEncoder.encode(apiToken, StandardCharsets.UTF_8.name()),
-                URLEncoder.encode(stationId, StandardCharsets.UTF_8.name()));
-        Request request = new Request.Builder().url(url).get().build();
+        Request request = requestFactory.buildRequest(stationId);
 
         try (Response response = httpClient.newCall(request).execute()) {
           if (response.isSuccessful()) {
