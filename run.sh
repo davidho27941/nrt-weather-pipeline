@@ -9,6 +9,8 @@ usage() {
   echo "  API_HEADERS - additional HTTP headers" >&2
   echo "  TOKEN_IN_HEADER - set to true to send token in header" >&2
   echo "  TOKEN_HEADER_NAME - header name when TOKEN_IN_HEADER=true" >&2
+  echo "  INPUT_TOPIC - Pub/Sub topic to read station IDs from" >&2
+  echo "  JOB_NAME - Dataflow job name" >&2
   exit 1
 }
 
@@ -41,11 +43,13 @@ API_DEFAULT_PARAM="${API_DEFAULT_PARAM:-}"
 API_HEADERS="${API_HEADERS:-}"
 TOKEN_IN_HEADER="${TOKEN_IN_HEADER:-false}"
 TOKEN_HEADER_NAME="${TOKEN_HEADER_NAME:-Authorization}"
+INPUT_TOPIC="${INPUT_TOPIC:-projects/${PROJECT_ID}/topics/weather_stn_id}"
+JOB_NAME="${JOB_NAME:-}"
 
 ARGS="--runner=DataflowRunner \
   --project=${PROJECT_ID} \
   --region=${REGION} \
-  --inputTopic=projects/${PROJECT_ID}/topics/weather_stn_id \
+  --inputTopic=${INPUT_TOPIC} \
   --outputPath=gs://${BUCKET}/weather/output \
   --bigQueryTable=${PROJECT_ID}:${DATASET}.weather_raw \
   --apiToken=${API_TOKEN} \
@@ -59,6 +63,9 @@ if [ -n "$API_DEFAULT_PARAM" ]; then
 fi
 if [ -n "$API_HEADERS" ]; then
   ARGS+=" --apiHeaders=${API_HEADERS}"
+fi
+if [ -n "$JOB_NAME" ]; then
+  ARGS+=" --jobName=${JOB_NAME}"
 fi
 ARGS+=" --tokenInHeader=${TOKEN_IN_HEADER}"
 ARGS+=" --tokenHeaderName=${TOKEN_HEADER_NAME}"
