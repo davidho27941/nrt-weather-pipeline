@@ -6,6 +6,35 @@ reads station IDs from a Pub/Sub topic, queries the Central Weather Administrati
 API requests are retried a configurable number of times and the station IDs are
 emitted as a `PCollectionTuple` separating successful and failed calls.
 
+## Project Overview
+
+This repository contains a small Apache Beam application that runs on Google
+Cloud Dataflow. It demonstrates how to fetch real-time weather data from the
+CWA open data API and persist the results for further processing. The pipeline
+makes use of the following Google Cloud resources:
+
+- **Pub/Sub topics** – `weather_stn_id` provides station IDs to process and
+  `weather_retry` receives IDs that failed after all retry attempts.
+- **Cloud Storage bucket** – used to store raw JSON output files.
+- **BigQuery dataset and table** – each successful API response is stored in a
+  table called `weather_raw` for querying.
+- **Secret Manager** – stores the PEM trust store required for calling the API
+  over HTTPS.
+- **Dataflow** – runs the streaming Beam job that orchestrates the workflow.
+
+The following diagram outlines the main flow of data through the system.
+
+```mermaid
+flowchart LR
+    subgraph "Dataflow job"
+        A["Pub/Sub\nweather_stn_id"] --> B["FetchWeatherDoFn\nquery CWA API"]
+        B -->|"success JSON"| C["Cloud Storage"]
+        B -->|"success JSON"| D["BigQuery"]
+        B -->|"failed ID"| E["Pub/Sub\nweather_retry"]
+    end
+    E -.-> F["Retry Dataflow job"]
+```
+
 ## Building
 
 This project uses Maven. To build a shaded JAR:
