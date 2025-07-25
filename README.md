@@ -56,6 +56,24 @@ mvn compile exec:java \
     --outputPath=gs://<bucket>/weather/output \
     --bigQueryTable=<project>:<dataset>.weather_raw \
     --apiToken=<api-token> \
+  --retryAttempts=<retries>"
+```
+
+To reuse the same JAR for a retry workflow, simply provide a different
+`--inputTopic` and set a unique `--jobName` when launching the pipeline. For
+example:
+
+```bash
+mvn compile exec:java \
+  -Dexec.mainClass=com.example.WeatherPipeline \
+  -Dexec.args="--runner=DataflowRunner \
+    --project=<gcp-project> \
+    --region=<region> \
+    --inputTopic=projects/<project>/topics/weather_retry \
+    --jobName=weather-pipeline-retry \
+    --outputPath=gs://<bucket>/weather/output \
+    --bigQueryTable=<project>:<dataset>.weather_raw \
+    --apiToken=<api-token> \
     --retryAttempts=<retries>"
 ```
 
@@ -65,7 +83,7 @@ Alternatively, you can use the included helper script:
 ./run.sh <gcp-project> <region> <bucket> <dataset> <api-token> <retries> [trust-store-secret-id] [trust-store-secret-version]
 ```
 
-Additional API request settings can be provided via environment variables before
+Additional settings can be provided via environment variables before
 running the script:
 
 - `API_BASE_URL` - override the CWA API endpoint
@@ -73,6 +91,8 @@ running the script:
 - `API_HEADERS` - extra HTTP headers as `Header:Value` pairs separated by commas
 - `TOKEN_IN_HEADER` - set to `true` to send the API token in a header
 - `TOKEN_HEADER_NAME` - header name used when `TOKEN_IN_HEADER` is `true`
+- `INPUT_TOPIC` - Pub/Sub topic to read station IDs from
+- `JOB_NAME` - name for the Dataflow job
 
 If the optional trust store arguments are omitted, the script defaults to `cwa-trust-pem` for the secret ID
 and `latest` for the secret version.
