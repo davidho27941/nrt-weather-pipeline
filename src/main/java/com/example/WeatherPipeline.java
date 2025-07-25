@@ -7,6 +7,7 @@ import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import java.util.List;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
@@ -14,6 +15,7 @@ import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TupleTagList;
 
 import com.example.FetchWeatherDoFn;
+import com.example.WeatherApiRequestFactory;
 import org.joda.time.Duration;
 
 /**
@@ -41,6 +43,30 @@ public class WeatherPipeline {
     String getApiToken();
     void setApiToken(String value);
 
+    @Description("Base URL for the CWA API")
+    @Default.String("https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001")
+    String getApiBaseUrl();
+    void setApiBaseUrl(String value);
+
+    @Description(
+        "Default query parameter groups, e.g. --apiDefaultParam=limit=1&elementName=TIME")
+    List<String> getApiDefaultParam();
+    void setApiDefaultParam(List<String> values);
+
+    @Description("Additional HTTP headers as 'Header:Value' comma separated")
+    String getApiHeaders();
+    void setApiHeaders(String value);
+
+    @Description("Send token in HTTP header instead of query parameter")
+    @Default.Boolean(false)
+    Boolean getTokenInHeader();
+    void setTokenInHeader(Boolean value);
+
+    @Description("Header name to use for the API token when tokenInHeader=true")
+    @Default.String("Authorization")
+    String getTokenHeaderName();
+    void setTokenHeaderName(String value);
+
     @Description("Secret ID containing CWA trust store PEM")
     String getTrustStoreSecretId();
     void setTrustStoreSecretId(String value);
@@ -62,6 +88,15 @@ public class WeatherPipeline {
 
     Pipeline pipeline = Pipeline.create(options);
 
+    WeatherApiRequestFactory requestFactory =
+        new WeatherApiRequestFactory(
+            options.getApiBaseUrl(),
+            options.getApiToken(),
+            options.getApiDefaultParam(),
+            options.getApiHeaders(),
+            options.getTokenInHeader(),
+            options.getTokenHeaderName());
+
     PCollectionTuple result =
         pipeline
             .apply("ReadStationId", PubsubIO.readStrings().fromTopic(options.getInputTopic()))
@@ -69,7 +104,7 @@ public class WeatherPipeline {
                 "FetchWeather",
                 ParDo.of(
                         new FetchWeatherDoFn(
-                            options.getApiToken(),
+                            requestFactory,
                             options.getProject(),
                             options.getTrustStoreSecretId(),
                             options.getTrustStoreSecretVersion(),
