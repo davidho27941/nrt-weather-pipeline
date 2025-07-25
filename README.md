@@ -65,6 +65,15 @@ Alternatively, you can use the included helper script:
 ./run.sh <gcp-project> <region> <bucket> <dataset> <api-token> <retries> [trust-store-secret-id] [trust-store-secret-version]
 ```
 
+Additional API request settings can be provided via environment variables before
+running the script:
+
+- `API_BASE_URL` - override the CWA API endpoint
+- `API_DEFAULT_PARAM` - default query parameters, e.g. `limit=1&elementName=TIME`
+- `API_HEADERS` - extra HTTP headers as `Header:Value` pairs separated by commas
+- `TOKEN_IN_HEADER` - set to `true` to send the API token in a header
+- `TOKEN_HEADER_NAME` - header name used when `TOKEN_IN_HEADER` is `true`
+
 If the optional trust store arguments are omitted, the script defaults to `cwa-trust-pem` for the secret ID
 and `latest` for the secret version.
 The `<retries>` parameter controls how many times a failed API request will be retried.

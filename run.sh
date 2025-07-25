@@ -3,6 +3,12 @@ set -euo pipefail
 
 usage() {
   echo "Usage: $0 <project-id> <region> <bucket> <dataset> <api-token> <retry-attempts> [trust-store-secret-id] [trust-store-secret-version]" >&2
+  echo "Optional settings can be provided via environment variables:" >&2
+  echo "  API_BASE_URL - CWA API endpoint" >&2
+  echo "  API_DEFAULT_PARAM - default query parameters" >&2
+  echo "  API_HEADERS - additional HTTP headers" >&2
+  echo "  TOKEN_IN_HEADER - set to true to send token in header" >&2
+  echo "  TOKEN_HEADER_NAME - header name when TOKEN_IN_HEADER=true" >&2
   exit 1
 }
 
@@ -29,16 +35,35 @@ else
   TRUST_STORE_SECRET_VERSION="latest"
 fi
 
+# Additional API configuration via environment variables
+API_BASE_URL="${API_BASE_URL:-https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001}"
+API_DEFAULT_PARAM="${API_DEFAULT_PARAM:-}"
+API_HEADERS="${API_HEADERS:-}"
+TOKEN_IN_HEADER="${TOKEN_IN_HEADER:-false}"
+TOKEN_HEADER_NAME="${TOKEN_HEADER_NAME:-Authorization}"
+
+ARGS="--runner=DataflowRunner \
+  --project=${PROJECT_ID} \
+  --region=${REGION} \
+  --inputTopic=projects/${PROJECT_ID}/topics/weather_stn_id \
+  --outputPath=gs://${BUCKET}/weather/output \
+  --bigQueryTable=${PROJECT_ID}:${DATASET}.weather_raw \
+  --apiToken=${API_TOKEN} \
+  --retryAttempts=${RETRY_ATTEMPTS} \
+  --trustStoreSecretId=${TRUST_STORE_SECRET_ID} \
+  --trustStoreSecretVersion=${TRUST_STORE_SECRET_VERSION} \
+  --apiBaseUrl=${API_BASE_URL}"
+
+if [ -n "$API_DEFAULT_PARAM" ]; then
+  ARGS+=" --apiDefaultParam=${API_DEFAULT_PARAM}"
+fi
+if [ -n "$API_HEADERS" ]; then
+  ARGS+=" --apiHeaders=${API_HEADERS}"
+fi
+ARGS+=" --tokenInHeader=${TOKEN_IN_HEADER}"
+ARGS+=" --tokenHeaderName=${TOKEN_HEADER_NAME}"
+
 mvn compile exec:java \
   -Dexec.mainClass=com.example.WeatherPipeline \
-  -Dexec.args="--runner=DataflowRunner \
-    --project=${PROJECT_ID} \
-    --region=${REGION} \
-    --inputTopic=projects/${PROJECT_ID}/topics/weather_stn_id \
-    --outputPath=gs://${BUCKET}/weather/output \
-    --bigQueryTable=${PROJECT_ID}:${DATASET}.weather_raw \
-    --apiToken=${API_TOKEN} \
-    --retryAttempts=${RETRY_ATTEMPTS} \
-    --trustStoreSecretId=${TRUST_STORE_SECRET_ID} \
-    --trustStoreSecretVersion=${TRUST_STORE_SECRET_VERSION}"
+  -Dexec.args="${ARGS}"
 
