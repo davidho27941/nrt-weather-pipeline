@@ -93,6 +93,8 @@ running the script:
 - `TOKEN_HEADER_NAME` - header name used when `TOKEN_IN_HEADER` is `true`
 - `INPUT_TOPIC` - Pub/Sub topic to read station IDs from
 - `JOB_NAME` - name for the Dataflow job
+- `NUM_WORKERS` - fixed number of Dataflow workers
+- `MAX_WORKERS` - maximum number of Dataflow workers
 
 If the optional trust store arguments are omitted, the script defaults to `cwa-trust-pem` for the secret ID
 and `latest` for the secret version.

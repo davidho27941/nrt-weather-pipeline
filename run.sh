@@ -11,6 +11,8 @@ usage() {
   echo "  TOKEN_HEADER_NAME - header name when TOKEN_IN_HEADER=true" >&2
   echo "  INPUT_TOPIC - Pub/Sub topic to read station IDs from" >&2
   echo "  JOB_NAME - Dataflow job name" >&2
+  echo "  NUM_WORKERS - fixed number of Dataflow workers" >&2
+  echo "  MAX_WORKERS - maximum number of Dataflow workers" >&2
   exit 1
 }
 
@@ -45,6 +47,8 @@ TOKEN_IN_HEADER="${TOKEN_IN_HEADER:-false}"
 TOKEN_HEADER_NAME="${TOKEN_HEADER_NAME:-Authorization}"
 INPUT_TOPIC="${INPUT_TOPIC:-projects/${PROJECT_ID}/topics/weather_stn_id}"
 JOB_NAME="${JOB_NAME:-}"
+NUM_WORKERS="${NUM_WORKERS:-}"
+MAX_WORKERS="${MAX_WORKERS:-}"
 
 ARGS="--runner=DataflowRunner \
   --project=${PROJECT_ID} \
@@ -66,6 +70,12 @@ if [ -n "$API_HEADERS" ]; then
 fi
 if [ -n "$JOB_NAME" ]; then
   ARGS+=" --jobName=${JOB_NAME}"
+fi
+if [ -n "$NUM_WORKERS" ]; then
+  ARGS+=" --numWorkers=${NUM_WORKERS}"
+fi
+if [ -n "$MAX_WORKERS" ]; then
+  ARGS+=" --maxNumWorkers=${MAX_WORKERS}"
 fi
 ARGS+=" --tokenInHeader=${TOKEN_IN_HEADER}"
 ARGS+=" --tokenHeaderName=${TOKEN_HEADER_NAME}"
